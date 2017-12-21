@@ -20,6 +20,9 @@
 		}
 	};
 
+	// Hackish, but this is a proof of concept
+	var watchEnabled = false;
+	var firebaseData = {};
 	exports.app = new Vue({
 
 		// the root element that will be compiled
@@ -27,17 +30,22 @@
 
 		// app initial state
 		data: {
-			todos: todoStorage.fetch(),
+			todos: [],
 			newTodo: '',
 			editedTodo: null,
-			visibility: 'all'
+			visibility: 'all',
+			status: null
 		},
 
 		// watch todos change for localStorage persistence
 		watch: {
 			todos: {
 				deep: true,
-				handler: todoStorage.save
+				handler: function() {
+					if (watchEnabled) {
+						return firebaseStore.store(firebaseData)
+					}
+				}
 			}
 		},
 
@@ -59,6 +67,40 @@
 						todo.completed = value;
 					});
 				}
+			}
+		},
+
+		created: function() {
+			var _this = this;
+			firebaseData.todos = this.todos;
+
+			// Ignore watcher on init
+			skipWatch();
+
+			firebaseStore.load().then(function(data) {
+				if (data && data.todos) {
+					_this.todos = firebaseData.todos = data.todos;
+					skipWatch();
+				}
+			});
+
+			firebaseStore.on('dataChange', function(newData) {
+				if (newData && newData.todos) {
+					_this.todos = firebaseData.todos = newData.todos;
+					skipWatch();
+				}
+			});
+
+			_this.status = firebaseStore.status;
+			firebaseStore.on('statusChange', function(status) {
+				_this.status = status;
+			})
+
+			function skipWatch() {
+				watchEnabled = false;
+				Vue.nextTick(function() {
+					watchEnabled = true;
+				});
 			}
 		},
 

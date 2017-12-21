@@ -5,10 +5,29 @@
 		<title>Vue.js • TodoMVC</title>
 		<link rel="stylesheet" href="node_modules/todomvc-common/base.css">
 		<link rel="stylesheet" href="node_modules/todomvc-app-css/index.css">
-		<style> [v-cloak] { display: none; } </style>
+		<style>
+			[v-cloak] {
+				display: none;
+			}
+
+			.status-indicator {
+				position: absolute;
+				top: -25px;
+				width: 100%;
+				text-align: right
+			}
+		</style>
 	</head>
 	<body>
 		<section class="todoapp" v-cloak>
+
+			<div class="status-indicator">
+				<span v-if="this.status === 0">Offline</span>
+				<span v-if="this.status === 1">Up to date</span>
+				<span v-if="this.status === 2">Loading</span>
+				<span v-if="this.status === 3">Storing</span>
+			</div>
+
 			<header class="header">
 				<h1>todos</h1>
 				<input class="new-todo" autofocus autocomplete="off" placeholder="What needs to be done?" v-model="newTodo" @keyup.enter="addTodo">
@@ -48,7 +67,11 @@
 		<script src="node_modules/todomvc-common/base.js"></script>
 		<script src="node_modules/director/build/director.js"></script>
 		<script src="node_modules/vue/dist/vue.js"></script>
-		<script src="js/store.js"></script>
+
+		<!-- Firebase -->
+		<script src="https://www.gstatic.com/firebasejs/4.8.1/firebase.js"></script>
+		<script src="js/firebase-store.js"></script>
+		
 		<script src="js/app.js"></script>
 		<script src="js/routes.js"></script>
 	</body>
