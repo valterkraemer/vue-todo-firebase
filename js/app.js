@@ -148,7 +148,7 @@
 			},
 
 			removeCompleted: function () {
-				this.todos = filters.active(this.todos);
+				this.todos = firebaseData.todos = filters.active(this.todos);
 			}
 		},
 

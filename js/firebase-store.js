@@ -141,7 +141,6 @@
 	}
 
 	function save(data) {
-		console.log('save')
 		ObjectStorage.set('data', data)
 		ObjectStorage.set('modified', true)
 
