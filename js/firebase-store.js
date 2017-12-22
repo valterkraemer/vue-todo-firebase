@@ -1,40 +1,23 @@
-;(function() {
+;(function(exports) {
+	'use strict';
+
+	// EventEmmiter
 	let EventEmitter = function() {
 		this.events = {}
-		this.onceEvents = {}
 	}
 
 	EventEmitter.prototype.on = function(event, listener) {
-		if (this.onceEvents[event]) {
-			while (this.onceEvents[event].length) {
-				this.onceEvents[event].shift()()
-			}
-		}
-
 		this.events[event] = this.events[event] || []
 		this.events[event].push(listener)
 	}
 
-	EventEmitter.prototype.onceOn = function(event, listener) {
-		this.onceEvents[event] = this.onceEvents[event] || []
-		this.onceEvents[event].push(listener)
-	}
-
 	EventEmitter.prototype.emit = function(event, data) {
-		if (!this.events[event]) {
-			return
-		}
-
-		for (let i = 0; i < this.events[event].length; i++) {
-			this.events[event][i](data)
+		if (this.events[event]) {
+			this.events[event].forEach(cb => cb(data))
 		}
 	}
 
-	window.MyEventEmitter = EventEmitter
-})()
-
-;(function(exports) {
-	'use strict';
+	// Firebase-store
 
 	const id = 'vue-todo-firebase'
 
@@ -51,7 +34,7 @@
 		}
 	}
 
-	let store = new MyEventEmitter()
+	let store = new EventEmitter()
 
 	const config = {
 		apiKey: "AIzaSyBLT3WLjFbEtHIQ5aAuk7E1_8l5l9Tc87M",
@@ -71,6 +54,17 @@
 	let loading = false
 	let storing = false
 	updateStatus()
+
+	store.authenticated = false
+
+	app.auth().onAuthStateChanged(user => {
+		let authenticated = !!user
+
+		store.authenticated = authenticated
+		store.emit('authChange', authenticated)
+	}, err => {
+		console.error('onAuthStateChanged error', err)
+	})
 
 	let saveData
 	let promise = Promise.resolve()
@@ -190,6 +184,20 @@
 		}
 	}
 
+	function login() {
+		let provider = new firebase.auth.GoogleAuthProvider()
+
+		return app.auth().signInWithPopup(provider).catch(err => {
+			console.error('Login error', err)
+		})
+	}
+
+	function logout() {
+		return app.auth().signOut().catch(err => {
+		  console.error('Logout error', err)
+		})
+	}
+
 	function updateStatus() {
 		// 0: Offline
 		// 1: Up to date
@@ -238,6 +246,8 @@
 
 	store.load = load
 	store.store = save
+	store.login = login
+	store.logout = logout
 
 	exports.firebaseStore = store
 

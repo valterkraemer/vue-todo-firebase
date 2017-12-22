@@ -11,35 +11,58 @@
 			}
 
 			.status-indicator {
-				position: absolute;
-				top: -25px;
-				width: 100%;
-				text-align: right
+				margin-left: auto;
+			}
+
+			.tool-bar {
+				display: flex;
+				padding: 3px;
+			}
+
+			.tool-bar span:first-child {
+				margin-left: auto;
+			}
+
+			.tool-bar > * {
+				padding: 3px 5px;
+			}
+
+			.tool-bar button {
+				border: 1px solid #ededed;
+				border-radius: 2px;
+				cursor: pointer;
+			}
+
+			.tool-bar button:hover {
+				background-color: #f5f5f5;
 			}
 		</style>
 	</head>
 	<body>
 		<section class="todoapp" v-cloak>
 
-			<div class="status-indicator">
-				<span v-if="this.status === 0">Offline</span>
-				<span v-if="this.status === 1">Up to date</span>
-				<span v-if="this.status === 2">Loading</span>
-				<span v-if="this.status === 3">Storing</span>
+			<div class="tool-bar">
+				<span v-if="status === 0">Offline</span>
+				<span v-if="status === 1">Up to date</span>
+				<span v-if="status === 2">Loading...</span>
+				<span v-if="status === 3">Storing...</span>
+
+				<button v-if="!authenticated" @click="login()">Login</button>
+				<button v-if="authenticated" @click="logout()">Logout</button>
 			</div>
 
 			<header class="header">
 				<h1>todos</h1>
-				<input class="new-todo" autofocus autocomplete="off" placeholder="What needs to be done?" v-model="newTodo" @keyup.enter="addTodo">
+				<input v-if="authenticated" class="new-todo" autofocus autocomplete="off" placeholder="What needs to be done?" v-model="newTodo" @keyup.enter="addTodo">
 			</header>
 			<section class="main" v-show="todos.length">
-				<input class="toggle-all" type="checkbox" v-model="allDone">
+				<input v-if="authenticated" class="toggle-all" type="checkbox" v-model="allDone">
 				<ul class="todo-list">
 					<li class="todo" v-for="todo in filteredTodos" :key="todo.id" :class="{completed: todo.completed, editing: todo == editedTodo}">
 						<div class="view">
-							<input class="toggle" type="checkbox" v-model="todo.completed">
-							<label @dblclick="editTodo(todo)">{{todo.title}}</label>
-							<button class="destroy" @click="removeTodo(todo)"></button>
+							<input class="toggle" type="checkbox" v-model="todo.completed" :disabled="!authenticated">
+							<label @dblclick="authenticated && editTodo(todo)">{{todo.title}}</label>
+							<button v-if="authenticated" class="destroy" @click="removeTodo(todo)"></button>
 						</div>
 						<input class="edit" type="text" v-model="todo.title" v-todo-focus="todo == editedTodo" @blur="doneEdit(todo)" @keyup.enter="doneEdit(todo)" @keyup.esc="cancelEdit(todo)">
 					</li>

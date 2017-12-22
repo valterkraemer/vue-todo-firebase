@@ -34,7 +34,8 @@
 			newTodo: '',
 			editedTodo: null,
 			visibility: 'all',
-			status: null
+			status: null,
+			authenticated: true
 		},
 
 		// watch todos change for localStorage persistence
@@ -96,6 +97,11 @@
 				_this.status = status;
 			})
 
+			_this.authenticated = firebaseStore.authenticated;
+			firebaseStore.on('authChange', function(authenticated) {
+				_this.authenticated = firebaseStore.authenticated;
+			})
+
 			function skipWatch() {
 				watchEnabled = false;
 				Vue.nextTick(function() {
@@ -149,6 +155,14 @@
 
 			removeCompleted: function () {
 				this.todos = firebaseData.todos = filters.active(this.todos);
+			},
+
+			login: function() {
+				return firebaseStore.login()
+			},
+
+			logout: function() {
+				return firebaseStore.logout()
 			}
 		},
 
