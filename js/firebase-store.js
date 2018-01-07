@@ -1,254 +1,281 @@
 ;(function(exports) {
-	'use strict';
+  'use strict'
 
-	// EventEmmiter
-	let EventEmitter = function() {
-		this.events = {}
-	}
+  function Store(name) {
+    var self = this
 
-	EventEmitter.prototype.on = function(event, listener) {
-		this.events[event] = this.events[event] || []
-		this.events[event].push(listener)
-	}
+    self._events = {}
+    self._dbName = name
+    self._status = {}
 
-	EventEmitter.prototype.emit = function(event, data) {
-		if (this.events[event]) {
-			this.events[event].forEach(cb => cb(data))
-		}
-	}
+    const config = {
+      apiKey: "AIzaSyBLT3WLjFbEtHIQ5aAuk7E1_8l5l9Tc87M",
+      authDomain: "test-projects-13910.firebaseapp.com",
+      databaseURL: "https://test-projects-13910.firebaseio.com",
+      projectId: "test-projects-13910",
+      storageBucket: "",
+      messagingSenderId: "20697715442"
+    }
 
-	// Firebase-store
+    self.app = firebase.initializeApp(config, firebase.apps.length ? 'app' + firebase.apps.length : undefined)
+    self.db = self.app.database().ref(name)
 
-	const id = 'vue-todo-firebase'
+    self.updateStatus({})
 
-	let ObjectStorage = {
-		get: key => {
-			try {
-				return JSON.parse(window.localStorage[`mavo-offline-${id}-${key}`])
-			} catch (err) {}
-		},
-		set: (key, value) => {
-			try {
-				window.localStorage[`mavo-offline-${id}-${key}`] = JSON.stringify(value)
-			} catch (err) {}
-		}
-	}
+    self.authenticated = false
 
-	let store = new EventEmitter()
+    self.app.auth().onAuthStateChanged(function(user) {
+      self.authenticated = !!user
+      self.emit('authChange', self.authenticated)
+    }, function(err) {
+      console.error('onAuthStateChanged error', err)
+    })
 
-	const config = {
-		apiKey: "AIzaSyBLT3WLjFbEtHIQ5aAuk7E1_8l5l9Tc87M",
-		authDomain: "test-projects-13910.firebaseapp.com",
-		databaseURL: "https://test-projects-13910.firebaseio.com",
-		projectId: "test-projects-13910",
-		storageBucket: "",
-		messagingSenderId: "20697715442"
-	}
+    self._promise = Promise.resolve()
 
-	let app = firebase.initializeApp(config)
-	let db = app.database().ref(id)
+    self.app.database().ref('.info/connected').on('value', function(snapshot) {
+      self.updateStatus({
+        online: snapshot.val()
+      })
+    })
 
-	let rev
+    self.db.on('value', function(snapshot) {
+      if (self._status.storing) {
+        return
+      }
 
-	let online = false
-	let loading = false
-	let storing = false
-	updateStatus()
+      var data = snapshot.val()
 
-	store.authenticated = false
+      if (self.isNewData(data)) {
+        self.updateData(data)
+      }
+    })
+  }
 
-	app.auth().onAuthStateChanged(user => {
-		let authenticated = !!user
+  Store.prototype.on = function(event, listener) {
+    this._events[event] = this._events[event] || []
+    this._events[event].push(listener)
+  }
 
-		store.authenticated = authenticated
-		store.emit('authChange', authenticated)
-	}, err => {
-		console.error('onAuthStateChanged error', err)
-	})
+  Store.prototype.emit = function(event, data) {
+    if (this._events[event]) {
+      this._events[event].forEach(function(cb) {
+        cb(data)
+      })
+    }
+  }
 
-	let saveData
-	let promise = Promise.resolve()
+  Store.prototype.load = function() {
+    var self = this
 
-	app.database().ref('.info/connected').on('value', snapshot => {
-		online = snapshot.val()
-		updateStatus()
-	})
+    if (self._status.loading) {
+      return Promise.resolve()
+    }
 
-	db.on('value', snapshot => {
-		let data = snapshot.val()
+    self._promise = self._promise.then(fetch)
 
-		if (isNewData(data)) {
-			return updateData(data)
-		}
-	})
+    var storageData = self.storageGet('data')
 
-	function load() {
-		promise = promise.then(fetch)
+    if (storageData) {
+      self.data = storageData
 
-		let storageData = ObjectStorage.get('data')
+      self._promise.then(function(data) {
+        if (self.isNewData(data)) {
+          return self.updateData(data)
+        }
 
-		if (storageData) {
-			rev = storageData._rev
+        if (self.storageGet('modified')) {
+          return self.store(self.storageGet('data'))
+        }
+      })
 
-			promise.then(data => {
-				if (isNewData(data)) {
-					return updateData(data)
-				}
+      return Promise.resolve(storageData)
+    }
 
-				if (ObjectStorage.get('modified')) {
-					return save(ObjectStorage.get('data'))
-				}
-			})
+    return self._promise.then(function(data) {
+      self.data = data
+      self.storageSet('data', data)
+      self.storageSet('modified', false)
+      return data
+    })
 
-			return Promise.resolve(storageData)
-		}
+    function fetch() {
+    	self.updateStatus({
+    		loading: true
+    	})
 
-		return promise.then(data => {
-			rev = Number.isInteger(data._rev) ? data._rev : 1
-			ObjectStorage.set('data', data)
-			ObjectStorage.set('modified', false)
-			return data
-		})
-	}
+    	return helper().then(function(snapshot) {
+    		self.updateStatus({
+    			loading: false
+    		})
 
-	function fetch() {
-		loading = true
-		updateStatus()
+    		return snapshot.val() || {}
+    	})
+    }
 
-		return helper().then(snapshot => {
-			let data = snapshot.val() || {}
+    function helper() {
+    	return self.db.once('value').catch(function(err) {
+    		if (err.status === 0) {
+    			return delay(5000).then(helper)
+    		}
+    		return Promise.reject(err)
+    	})
+    }
+  }
 
-			loading = false
-			updateStatus()
+  Store.prototype.store = function(data) {
+    var self = this
 
-			return data
-		})
+    self.storageSet('data', data)
+    self.storageSet('modified', true)
 
-		function helper() {
-			return db.once('value').catch(err => {
-				if (err.status === 0) {
-					return delay(5000).then(helper)
-				}
-				return Promise.reject(err)
-			})
-		}
-	}
+    self.saveData = Object.assign({}, data, {
+      _rev: (this.data && Number.isInteger(this.data._rev)) ? this.data._rev + 1 : 1
+    })
 
-	function save(data) {
-		ObjectStorage.set('data', data)
-		ObjectStorage.set('modified', true)
+    if (self._status.storing) {
+      return Promise.resolve()
+    }
 
-		saveData = data
+    self.updateStatus({
+      storing: true
+    })
 
-		if (storing) {
-			return Promise.resolve()
-		}
+    self._promise = self._promise.then(function() {
+      return helper()
+    })
 
-		storing = true
-		updateStatus()
+    function helper() {
+      var helperData = self.saveData
 
-		promise = promise.then(helper)
+      return self.db.transaction(function(currentData) {
+        if (self.saveData) {
+          helperData = self.saveData
+          delete self.saveData
+        }
+        
+        if (currentData && currentData._rev && (!helperData || currentData._rev >= helperData._rev)) {
+          
+          self.updateData(currentData)
+          return currentData
+        }
 
-		function helper() {
-			return db.transaction(currentData => {
-				rev = (currentData && Number.isInteger(currentData._rev)) ? currentData._rev + 1 : 1
+        return helperData
+      }).then(function(response) {
+        var val = response.snapshot.val()
 
-				let transactionData = Object.assign({}, saveData, {
-					_rev: rev
-				})
+        if (self.saveData) {
+          self.saveData._rev = val._rev + 1
+          return helper()
+        }
 
-				saveData = undefined
+        self.data = val
+        self.storageSet('data', val)
+        self.storageSet('modified', false)
+        
+        self.updateStatus({
+          storing: false
+        })
 
-				return transactionData
-			}).then(response => {
-				if (saveData) {
-					return helper()
-				}
+      }).catch(function(err) {
+        if (err.status === 0) {
+          return delay(5000).then(helper)
+        }
 
-				ObjectStorage.set('data', response.snapshot.val())
-				ObjectStorage.set('modified', false)
-				
-				storing = false
-				updateStatus()
+        return Promise.reject(err)
+      })
+    }
+  }
 
-			}).catch(err => {
-				switch (err.status) {
-					case 0:
-					return delay(5000).then(helper)
-					case 409:
-					// TODO: resolve conflict
-				}
+  Store.prototype.updateData = function(data) {
+  	var self = this
 
-				return Promise.reject(err)
-			})
-		}
-	}
+  	if (!data) {
+  		return
+  	}
 
-	function login() {
-		let provider = new firebase.auth.GoogleAuthProvider()
+  	self.data = data
+  	self.storageSet('data', data)
+  	self.storageSet('modified', false)
 
-		return app.auth().signInWithPopup(provider).catch(err => {
-			console.error('Login error', err)
-		})
-	}
+  	self.emit('dataChange', data)
+  }
 
-	function logout() {
-		return app.auth().signOut().catch(err => {
-		  console.error('Logout error', err)
-		})
-	}
+  Store.prototype.updateStatus = function(obj) {
+    // 0: Offline
+    // 1: Up to date
+    // 2: Loading
+    // 3: Storing
 
-	function updateStatus() {
-		// 0: Offline
-		// 1: Up to date
-		// 2: Loading
-		// 3: Storing
+    Object.assign(this._status, obj)
 
-		let status = 0
+    var status = 0
 
-		if (online) {
-			status = 1
+    if (this._status.online) {
+      status = 1
 
-			if (storing) {
-				status = 3
-			}
+      if (this._status.storing) {
+        status = 3
+      }
 
-			if (loading) {
-				status = 2
-			}
-		}
+      if (this._status.loading) {
+        status = 2
+      }
+    }
 
-		if (store.status === status) {
-			return
-		}
+    if (this.status === status) {
+      return
+    }
 
-		store.status = status
-		store.emit('statusChange', status)
-	}
+    this.status = status
+    this.emit('statusChange', status)
+  }
 
-	function isNewData(data) {
-		return data && Number.isInteger(data._rev) && (!Number.isInteger(rev) || data._rev > rev)
-	}
+  Store.prototype.login = function() {
+    var provider = new firebase.auth.GoogleAuthProvider()
 
-	function updateData(data) {
-		rev = Number.isInteger(data._rev) ? data._rev : 1
-		ObjectStorage.set('data', data)
-		ObjectStorage.set('modified', false)
+    return this.app.auth().signInWithPopup(provider).catch(function(err) {
+      console.error('Login error', err)
+    })
+  }
 
-		store.emit('dataChange', data)
-	}
+  Store.prototype.logout = function() {
+    return this.app.auth().signOut().catch(function(err) {
+      console.error('Logout error', err)
+    })
+  }
 
-	function delay (ms) {
-		return new Promise(resolve => {
-			setTimeout(resolve, ms)
-		})
-	}
+  // localStorage
 
-	store.load = load
-	store.store = save
-	store.login = login
-	store.logout = logout
+  Store.prototype.storageSet = function(key, value) {
+    try {
+      window.localStorage[this._dbName + '-' + key] = JSON.stringify(value)
+    } catch (err) {}
+  }
 
-	exports.firebaseStore = store
+  Store.prototype.storageGet = function(key) {
+    try {
+      return JSON.parse(window.localStorage[this._dbName + '-' + key])
+    } catch (err) {}
+  }
 
+  // Helpers
+
+  Store.prototype.isNewData = function(data) {
+    if (!this.data || !Number.isInteger(this.data._rev)) {
+      return true
+    }
+    if (!data || !Number.isInteger(data._rev)) {
+      return false
+    }
+    return this.data._rev < data._rev
+  }
+
+  function delay (ms) {
+    return new Promise(function(resolve) {
+      setTimeout(resolve, ms)
+    })
+  }
+
+  exports.FirebaseStore = Store
 })(window)

@@ -23,6 +23,9 @@
 	// Hackish, but this is a proof of concept
 	var watchEnabled = false;
 	var firebaseData = {};
+
+	var firebaseStore = new FirebaseStore('vue-todo-firebase');
+
 	exports.app = new Vue({
 
 		// the root element that will be compiled
@@ -72,35 +75,36 @@
 		},
 
 		created: function() {
-			var _this = this;
+			var self = this;
 			firebaseData.todos = this.todos;
 
 			// Ignore watcher on init
 			skipWatch();
 
-			firebaseStore.load().then(function(data) {
-				if (data && data.todos) {
-					_this.todos = firebaseData.todos = data.todos;
-					skipWatch();
-				}
-			});
+			firebaseStore.load().then(updateData);
 
-			firebaseStore.on('dataChange', function(newData) {
-				if (newData && newData.todos) {
-					_this.todos = firebaseData.todos = newData.todos;
-					skipWatch();
-				}
-			});
+			firebaseStore.on('dataChange', updateData);
 
-			_this.status = firebaseStore.status;
+			self.status = firebaseStore.status;
 			firebaseStore.on('statusChange', function(status) {
-				_this.status = status;
+				self.status = status;
 			})
 
-			_this.authenticated = firebaseStore.authenticated;
+			self.authenticated = firebaseStore.authenticated;
 			firebaseStore.on('authChange', function(authenticated) {
-				_this.authenticated = firebaseStore.authenticated;
+				self.authenticated = firebaseStore.authenticated;
 			})
+
+			function updateData(data) {
+				if (!data || !data.todos) {
+					return;
+				}
+
+				Object.assign(firebaseData, data)
+				Object.assign(self, firebaseData)
+
+				skipWatch();
+			}
 
 			function skipWatch() {
 				watchEnabled = false;
